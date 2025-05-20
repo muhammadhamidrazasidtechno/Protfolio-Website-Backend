@@ -39,7 +39,9 @@ app.use(
     credentials: true,
   })
 );
-
+app.get("/", (req, res) => {
+  res.send("Welcome to the backend server!");
+});
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
