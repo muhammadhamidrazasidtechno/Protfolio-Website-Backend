@@ -16,29 +16,7 @@ function log(message, source = "express") {
 const app = express();
 
 // ✅ CORS middleware
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin) return callback(null, true); // Postman or no origin requests
-
-      if (app.get("env") === "development") {
-        return callback(null, true);
-      }
-
-      const allowedOrigins = [
-        "https://muhammad-hamid-raza.vercel.app/",
-        "http://localhost:5173", // if testing locally
-      ];
-
-      if (allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-    credentials: true,
-  })
-);
+app.use(cors());
 app.get("/", (req, res) => {
   res.send("Welcome to the backend server!");
 });
