@@ -1,18 +1,12 @@
-import express, { type Express, type Request, type Response } from "express";
-import { createServer, type Server } from "http";
-import fetch from "node-fetch";
-import { config } from "dotenv";
-import nodemailer from "nodemailer";
+const fetch = require("node-fetch");
+const nodemailer = require("nodemailer");
+require("dotenv").config();
 
-// Load environment variables from .env file
-config();
-
-export async function registerRoutes(app: Express): Promise<Server> {
-  // API routes prefix
+function registerRoutes(app) {
   const apiPrefix = "/api";
 
   // Contact form submission endpoint
-  app.post(`${apiPrefix}/contact`, async (req: Request, res: Response) => {
+  app.post(`${apiPrefix}/contact`, async (req, res) => {
     try {
       const { name, email, subject, message } = req.body;
 
@@ -21,12 +15,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           message: "All fields are required: name, email, subject, message",
         });
       }
-      console.log(process.env.SMTP_USER, "process.env.SMTP_USER");
-      // Nodemailer setup
+
       const transporter = nodemailer.createTransport({
         host: process.env.SMTP_HOST,
         port: parseInt(process.env.SMTP_PORT || "465"),
-        secure: process.env.SMTP_SECURE === "true", // true for 465, false for other ports
+        secure: process.env.SMTP_SECURE === "true",
         auth: {
           user: process.env.SMTP_USER,
           pass: process.env.SMTP_PASS,
@@ -38,13 +31,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         to: process.env.RECEIVER_EMAIL,
         subject: `[Portfolio] New Message: ${subject}`,
         html: `
-        <h3>You have a new contact request</h3>
-        <p><strong>Name:</strong> ${name}</p>
-        <p><strong>Email:</strong> ${email}</p>
-        <p><strong>Subject:</strong> ${subject}</p>
-        <p><strong>Message:</strong></p>
-        <p>${message}</p>
-      `,
+          <h3>You have a new contact request</h3>
+          <p><strong>Name:</strong> ${name}</p>
+          <p><strong>Email:</strong> ${email}</p>
+          <p><strong>Subject:</strong> ${subject}</p>
+          <p><strong>Message:</strong></p>
+          <p>${message}</p>
+        `,
       };
 
       await transporter.sendMail(mailOptions);
@@ -60,10 +53,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Download CV endpoint (basic implementation)
-  app.get(`${apiPrefix}/download-cv`, (req: Request, res: Response) => {
-    // In a real scenario, this would generate or serve a real CV file
-    // For now, just return a success message
+  // Download CV endpoint
+  app.get(`${apiPrefix}/download-cv`, (req, res) => {
     res.status(200).json({
       message:
         "CV download functionality is implemented on the client side using jsPDF.",
@@ -71,7 +62,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Chat endpoint for Gemini API
-  app.post(`${apiPrefix}/chat`, async (req: Request, res: Response) => {
+  app.post(`${apiPrefix}/chat`, async (req, res) => {
+    console.log("Chat endpoint hit", "info");
     try {
       const { message, history } = req.body;
 
@@ -80,6 +72,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+      console.log("GEMINI_API_KEY:", GEMINI_API_KEY);
 
       if (!GEMINI_API_KEY) {
         return res
@@ -87,20 +80,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .json({ message: "Gemini API key is not configured" });
       }
 
-      // Format chat history for the Gemini API
       const formattedHistory =
-        history?.map((item: { role: string; content: string }) => ({
+        history?.map((item) => ({
           role: item.role === "user" ? "user" : "model",
           parts: [{ text: item.content }],
         })) || [];
 
-      // Add the current message
       formattedHistory.push({
         role: "user",
         parts: [{ text: message }],
       });
 
-      // Add CV context with specific instructions based on requirements
       const cvContextHamid = {
         role: "model",
         parts: [
@@ -247,11 +237,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ],
       };
 
-      // Create contents array with CV context
       let contents;
 
       if (formattedHistory.length === 0) {
-        // First message, include CV context
         contents = [
           cvContextHamid,
           {
@@ -260,7 +248,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           },
         ];
       } else {
-        // Continue conversation with CV context
         contents = [
           cvContextHamid,
           ...formattedHistory,
@@ -271,6 +258,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ];
       }
 
+      console.log("Request body:", JSON.stringify({ contents }, null, 2));
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
         {
@@ -289,7 +277,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }),
         }
       );
-      console.log(response, "response");
+
+      console.log("Response status:", response.status);
       if (!response.ok) {
         const errorText = await response.text();
         console.error("Gemini API error:", errorText);
@@ -300,10 +289,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const data = await response.json();
+      console.log("Response data:", JSON.stringify(data, null, 2));
 
-      // Extract the response text from the Gemini API format
       const aiResponse =
-        (data as any).candidates?.[0]?.content?.parts?.[0]?.text ||
+        data.candidates?.[0]?.content?.parts?.[0]?.text ||
         "Sorry, I couldn't generate a response. Please try again.";
 
       return res.status(200).json({
@@ -317,9 +306,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   });
-
-  // Create HTTP server
-  const httpServer = createServer(app);
-
-  return httpServer;
 }
+
+module.exports = { registerRoutes };

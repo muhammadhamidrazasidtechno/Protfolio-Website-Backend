@@ -1,7 +1,17 @@
-import express, { type Request, Response, NextFunction } from "express";
-import cors from "cors";
-import { registerRoutes } from "./routes";
-import { log } from "./vite"; // keep log if needed
+const express = require("express");
+const cors = require("cors");
+const { registerRoutes } = require("./routes");
+
+// Simple log function (since vite.js isn't provided)
+function log(message, source = "express") {
+  const formattedTime = new Date().toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  });
+  console.log(`${formattedTime} [${source}] ${message}`);
+}
 
 const app = express();
 
@@ -37,7 +47,7 @@ app.use(express.urlencoded({ extended: false }));
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
+  let capturedJsonResponse;
 
   const originalResJson = res.json;
   res.json = function (bodyJson, ...args) {
@@ -64,21 +74,25 @@ app.use((req, res, next) => {
   next();
 });
 
-(async () => {
-  const server = await registerRoutes(app);
+// Register routes
+registerRoutes(app);
 
-  // 🌐 Global error handler
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+// 🌐 Global error handler
+app.use((err, req, res, next) => {
+  const status = err.status || err.statusCode || 500;
+  const message = err.message || "Internal Server Error";
 
-    log(`Error: ${message}`, "error");
-    res.status(status).json({ message });
-  });
+  log(`Error: ${message}`, "error");
+  res.status(status).json({ message });
+});
 
-  // ✅ Start backend only
-  const port = 3000;
-  server.listen(port, "0.0.0.0", () => {
+// Start backend only for local development
+const port = 3000;
+if (process.env.NODE_ENV !== "production") {
+  app.listen(port, "0.0.0.0", () => {
     log(`Backend server running on http://localhost:${port}`);
   });
-})();
+}
+
+// Export the app for Vercel
+module.exports = app;
