@@ -1,101 +1,45 @@
 const fetch = require("node-fetch");
 const nodemailer = require("nodemailer");
+const express = require("express");
+
 require("dotenv").config();
+const router = express.Router();
 
-function registerRoutes(app) {
-  const apiPrefix = "/api";
+router.post("/chat", async (req, res) => {
+  console.log("Chat endpoint hit", "info");
+  try {
+    const { message, history } = req.body;
+    console.log("Request body received:", { message, history });
 
-  // Contact form submission endpoint
-  app.post(`${apiPrefix}/contact`, async (req, res) => {
-    try {
-      const { name, email, subject, message } = req.body;
-
-      if (!name || !email || !subject || !message) {
-        return res.status(400).json({
-          message: "All fields are required: name, email, subject, message",
-        });
-      }
-
-      const transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port: parseInt(process.env.SMTP_PORT || "465"),
-        secure: process.env.SMTP_SECURE === "true",
-        auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS,
-        },
-      });
-
-      const mailOptions = {
-        from: `"Contact Form" <${process.env.SMTP_USER}>`,
-        to: process.env.RECEIVER_EMAIL,
-        subject: `[Portfolio] New Message: ${subject}`,
-        html: `
-          <h3>You have a new contact request</h3>
-          <p><strong>Name:</strong> ${name}</p>
-          <p><strong>Email:</strong> ${email}</p>
-          <p><strong>Subject:</strong> ${subject}</p>
-          <p><strong>Message:</strong></p>
-          <p>${message}</p>
-        `,
-      };
-
-      await transporter.sendMail(mailOptions);
-
-      return res.status(200).json({
-        message: "Message sent successfully!",
-      });
-    } catch (error) {
-      console.error("Email send error:", error);
-      return res.status(500).json({
-        message: "Failed to send message. Please try again later.",
-      });
+    if (!message) {
+      return res.status(400).json({ message: "Message is required" });
     }
-  });
 
-  // Download CV endpoint
-  app.get(`${apiPrefix}/download-cv`, (req, res) => {
-    res.status(200).json({
-      message:
-        "CV download functionality is implemented on the client side using jsPDF.",
+    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+    console.log("GEMINI_API_KEY exists:", !!GEMINI_API_KEY);
+
+    if (!GEMINI_API_KEY) {
+      return res
+        .status(500)
+        .json({ message: "Gemini API key is not configured" });
+    }
+
+    const formattedHistory =
+      history?.map((item) => ({
+        role: item.role === "user" ? "user" : "model",
+        parts: [{ text: item.content }],
+      })) || [];
+
+    formattedHistory.push({
+      role: "user",
+      parts: [{ text: message }],
     });
-  });
 
-  // Chat endpoint for Gemini API
-  app.post(`${apiPrefix}/chat`, async (req, res) => {
-    console.log("Chat endpoint hit", "info");
-    try {
-      const { message, history } = req.body;
-
-      if (!message) {
-        return res.status(400).json({ message: "Message is required" });
-      }
-
-      const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-      console.log("GEMINI_API_KEY:", GEMINI_API_KEY);
-
-      if (!GEMINI_API_KEY) {
-        return res
-          .status(500)
-          .json({ message: "Gemini API key is not configured" });
-      }
-
-      const formattedHistory =
-        history?.map((item) => ({
-          role: item.role === "user" ? "user" : "model",
-          parts: [{ text: item.content }],
-        })) || [];
-
-      formattedHistory.push({
-        role: "user",
-        parts: [{ text: message }],
-      });
-
-      const cvContextHamid = {
-        role: "model",
-        parts: [
-          {
-            text: `You are an AI assistant trained on Muhammad Hamid Raza's CV. Your primary role is to provide accurate and professional answers about his skills, experience, education, certifications, and contact details. You can also answer general questions related to his expertise (e.g., web development, coding, MERN stack) by leveraging his skills and experience. Respond conversationally and professionally, and do not invent information.
+    const cvContextHamid = {
+      role: "model",
+      parts: [
+        {
+          text: `You are an AI assistant trained on Muhammad Hamid Raza's CV. Your primary role is to provide accurate and professional answers about his skills, experience, education, certifications, and contact details. You can also answer general questions related to his expertise (e.g., web development, coding, MERN stack) by leveraging his skills and experience. Respond conversationally and professionally, and do not invent information.
       
       CV Data for Muhammad Hamid Raza:
       age: 18
@@ -233,79 +177,161 @@ function registerRoutes(app) {
       
       10. Show Passion and Youthful Energy:
       Reflect my age (18) and enthusiasm for tech. Use phrases like “let’s make it happen,” “super excited,” or “I’ve got this” to convey energy while staying professional. For example: “I’m super excited to build you a website that stands out! Let’s make it happen with some clean React.js code and a solid Node.js back-end for just $50!”`,
-          },
-        ],
-      };
+        },
+      ],
+    };
 
-      let contents;
-
-      if (formattedHistory.length === 0) {
-        contents = [
-          cvContextHamid,
-          {
-            role: "user",
-            parts: [{ text: message }],
-          },
-        ];
-      } else {
-        contents = [
-          cvContextHamid,
-          ...formattedHistory,
-          {
-            role: "user",
-            parts: [{ text: message }],
-          },
-        ];
-      }
-
-      console.log("Request body:", JSON.stringify({ contents }, null, 2));
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+    let contents;
+    if (formattedHistory.length === 0) {
+      contents = [
+        cvContextHamid,
         {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
+          role: "user",
+          parts: [{ text: message }],
+        },
+      ];
+    } else {
+      contents = [
+        cvContextHamid,
+        ...formattedHistory,
+        {
+          role: "user",
+          parts: [{ text: message }],
+        },
+      ];
+    }
+
+    console.log(
+      "Sending payload to Gemini API:",
+      JSON.stringify({ contents }, null, 2)
+    );
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: contents,
+          generationConfig: {
+            temperature: 0.7,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 1024,
           },
-          body: JSON.stringify({
-            contents: contents,
-            generationConfig: {
-              temperature: 0.7,
-              topK: 40,
-              topP: 0.95,
-              maxOutputTokens: 1024,
-            },
-          }),
-        }
-      );
-
-      console.log("Response status:", response.status);
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Gemini API error:", errorText);
-        return res.status(response.status).json({
-          message: "Error communicating with AI service",
-          details: errorText,
-        });
+        }),
       }
+    );
 
-      const data = await response.json();
-      console.log("Response data:", JSON.stringify(data, null, 2));
+    console.log("Gemini API response status:", response.status);
+    console.log(
+      "Gemini API response headers:",
+      JSON.stringify([...response.headers])
+    );
 
-      const aiResponse =
-        data.candidates?.[0]?.content?.parts?.[0]?.text ||
-        "Sorry, I couldn't generate a response. Please try again.";
-
-      return res.status(200).json({
-        response: aiResponse,
-      });
-    } catch (error) {
-      console.error("Chat endpoint error:", error);
+    if (response.status === 204) {
+      console.log("Received 204 No Content from Gemini API");
       return res.status(500).json({
-        message: "An error occurred while processing your request",
-        details: error instanceof Error ? error.message : String(error),
+        message:
+          "Gemini API returned no content. Please try again or check the API configuration.",
       });
     }
-  });
-}
 
-module.exports = { registerRoutes };
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Gemini API error:", errorText);
+      return res.status(response.status).json({
+        message: "Error communicating with AI service",
+        details: errorText,
+      });
+    }
+
+    const data = await response.json();
+    console.log("Gemini API response data:", JSON.stringify(data, null, 2));
+
+    const aiResponse =
+      data.candidates?.[0]?.content?.parts?.[0]?.text ||
+      "Sorry, I couldn't generate a response. Please try again.";
+
+    console.log("AI response to send:", aiResponse);
+
+    return res.status(200).json({
+      response: aiResponse,
+    });
+  } catch (error) {
+    console.error("Chat endpoint error:", error);
+    return res.status(500).json({
+      message: "An error occurred while processing your request",
+      details: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+router.get("/test-route", (req, res) => {
+  console.log("Test route hit!");
+  res.status(200).json({ message: "Test route works!" });
+});
+// Middleware to log requests
+router.get("/check", (req, res) => {
+  res.status(200).json({
+    message: "Server is running",
+  });
+});
+
+// Contact form submission endpoint
+router.post("/contact", async (req, res) => {
+  try {
+    const { name, email, subject, message } = req.body;
+
+    if (!name || !email || !subject || !message) {
+      return res.status(400).json({
+        message: "All fields are required: name, email, subject, message",
+      });
+    }
+
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: parseInt(process.env.SMTP_PORT || "465"),
+      secure: process.env.SMTP_SECURE === "true",
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+
+    await transporter.sendMail({
+      from: `"Contact Form" <${process.env.SMTP_USER}>`,
+      to: process.env.RECEIVER_EMAIL,
+      subject: `[Portfolio] New Message: ${subject}`,
+      html: `
+        <h3>New Contact Request</h3>
+        <p><strong>Name:</strong> ${name}</p>
+        <p><strong>Email:</strong> ${email}</p>
+        <p><strong>Subject:</strong> ${subject}</p>
+        <p><strong>Message:</strong></p>
+        <p>${message}</p>
+      `,
+    });
+
+    res.status(200).json({ message: "Message sent successfully!" });
+  } catch (err) {
+    console.error("Error sending email:", err);
+    res.status(500).json({ message: "Failed to send message." });
+  }
+});
+
+// Download CV endpoint
+router.get(`/download-cv`, (req, res) => {
+  const cvFilePath = path.join(__dirname, "path/to/your/cv.pdf");
+  res.download(cvFilePath, "Muhammad_Hamid_Raza_CV.pdf", (err) => {
+    if (err) {
+      console.error("Error downloading CV:", err);
+      res.status(500).json({ message: "Failed to download CV." });
+    }
+  });
+});
+
+// Chat endpoint for Gemini API
+
+module.exports = router;
