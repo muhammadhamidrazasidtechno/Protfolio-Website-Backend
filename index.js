@@ -42,6 +42,10 @@ app.use(
 app.get("/", (req, res) => {
   res.send("Welcome to the backend server!");
 });
+app.get("/test", (req, res) => {
+  res.json({ message: "Test endpoint is working!" });
+});
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
