@@ -15,7 +15,10 @@ router.post("/chat", async (req, res) => {
       return res.status(400).json({ message: "Message is required" });
     }
 
-    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+    const GEMINI_API_KEY =
+      cvPerson && cvPerson.toLowerCase() === "mustafa"
+        ? process.env.GEMINI_API_KEY_MUSTAFA
+        : process.env.GEMINI_API_KEY;
     console.log("GEMINI_API_KEY exists:", !!GEMINI_API_KEY);
 
     if (!GEMINI_API_KEY) {
