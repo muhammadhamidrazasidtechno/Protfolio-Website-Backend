@@ -9,6 +9,7 @@ const allowedOrigins = [
   "http://localhost:3000", // Default server port
   "http://localhost:5000", // Common Vite/React front-end port (adjust if different)
   "https://muhammad-hamid-raza.vercel.app", // Your Vercel app
+  "https://muhammad-mustafa-mu.vercel.app",
 ];
 
 app.use(
