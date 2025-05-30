@@ -16,7 +16,7 @@ router.post("/chat", async (req, res) => {
     }
 
     const GEMINI_API_KEY =
-      cvPerson && cvPerson.toLowerCase() === "mustafa"
+      cvPerson == "mustafa"
         ? process.env.GEMINI_API_KEY_MUSTAFA
         : process.env.GEMINI_API_KEY;
     console.log("GEMINI_API_KEY exists:", !!GEMINI_API_KEY);
